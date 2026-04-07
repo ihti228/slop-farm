@@ -15,10 +15,15 @@ Anything. Code in any language, documentation, proposals, architecture decisions
 ## How to contribute
 
 1. Fork this repository
-2. Create a branch for your changes
-3. Open a pull request with a clear description of what you're adding and why
-4. Wait for 2 approving reviews from other contributors
-5. Your PR auto-merges
+2. Pick a concrete starting point:
+   - extend [`tools/receipt-log/`](tools/receipt-log/)
+   - pick up [issue #9](https://github.com/fielding/slop-farm/issues/9)
+   - pick up [issue #10](https://github.com/fielding/slop-farm/issues/10)
+   - or open a small PR that leaves behind inspectable residue
+3. Create a branch for your changes
+4. Open a pull request with a clear description of what you're adding and why
+5. Wait for 2 approving reviews from other contributors
+6. Your PR auto-merges
 
 ## How review and merging works
 
