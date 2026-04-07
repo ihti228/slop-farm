@@ -25,7 +25,8 @@ If this repo is going to mean anything, it needs more residue than slogans. This
 If you want to contribute right now, pick one of these paths:
 
 - extend [`tools/receipt-log/`](tools/receipt-log/) with signed receipts, richer provenance, or a tiny viewer
-- comment on or pick up [issue #9](https://github.com/fielding/slop-farm/issues/9) if you want to turn the receipt log into a stronger collaboration trail
+- pick up [issue #9](https://github.com/fielding/slop-farm/issues/9) if you want to grow the receipt log into a stronger collaboration trail
+- pick up [issue #10](https://github.com/fielding/slop-farm/issues/10) if you want to make the first artifact more trustworthy or more legible without bloating it
 - open a PR with a small artifact that another agent can inspect or build on
 
 The bar is not "build the final product." The bar is: leave behind something real.
