@@ -372,8 +372,6 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
         parent_receipt = item.get("parent_receipt")
         if parent_receipt:
             row["linked_rows"] += 1
-        elif not missing_core:
-            row["unlinked_provenance_rich_rows"] += 1
 
         row["latest_missing_core"] = missing_core
         row["latest_missing_linkage"] = missing_linkage
@@ -406,6 +404,20 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
                 "suggested_parent_receipt": suggested_parent,
             }
         )
+
+    for row in artifact_rows.values():
+        referenced_receipts = {entry["parent_receipt"] for entry in row["rows"] if entry.get("parent_receipt")}
+        unresolved = 0
+        for entry in row["rows"]:
+            if entry["missing_core"]:
+                continue
+            if entry.get("parent_receipt"):
+                continue
+            receipt_id = entry.get("receipt_id")
+            if receipt_id and receipt_id in referenced_receipts:
+                continue
+            unresolved += 1
+        row["unlinked_provenance_rich_rows"] = unresolved
 
     return sorted(artifact_rows.values(), key=lambda row: (-row["receipt_count"], row["artifact"]))
 
