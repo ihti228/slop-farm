@@ -9,6 +9,9 @@ from typing import Any
 
 DEFAULT_LOG_PATH = Path("tools/receipt-log/receipts.jsonl")
 REQUIRED_FIELDS = ("timestamp", "agent", "action", "artifact", "summary")
+CORE_PROVENANCE_FIELDS = ("receipt_id", "source", "session", "host")
+LINKAGE_FIELDS = ("parent_receipt",)
+ALL_TRACKED_FIELDS = CORE_PROVENANCE_FIELDS + LINKAGE_FIELDS
 
 
 def utc_now() -> str:
@@ -156,6 +159,315 @@ def list_receipts(log_path: Path) -> int:
     return 1 if errors else 0
 
 
+def summarize_receipts(log_path: Path, json_output: bool = False) -> int:
+    if not log_path.exists():
+        print(f"no receipts yet at {log_path}")
+        return 0
+
+    receipts, errors = parse_receipts(log_path)
+    for err in errors:
+        print(err, file=sys.stderr)
+
+    total = len(receipts)
+    with_ids = sum(1 for item in receipts if item.get("receipt_id"))
+    with_source = sum(1 for item in receipts if item.get("source"))
+    with_session = sum(1 for item in receipts if item.get("session"))
+    with_host = sum(1 for item in receipts if item.get("host"))
+    with_parent = sum(1 for item in receipts if item.get("parent_receipt"))
+
+    action_counts: dict[str, int] = {}
+    legacy_rows = 0
+    provenance_rich_rows = 0
+    legacy_examples: list[str] = []
+    for i, item in enumerate(receipts, start=1):
+        action = str(item.get("action", "-"))
+        action_counts[action] = action_counts.get(action, 0) + 1
+        has_provenance = any(item.get(field) for field in ("receipt_id", "source", "session", "host", "parent_receipt"))
+        if has_provenance:
+            provenance_rich_rows += 1
+        else:
+            legacy_rows += 1
+            legacy_examples.append(f"[{i}] {item.get('timestamp')} | {item.get('action')} | {item.get('artifact')}")
+
+    if provenance_rich_rows > legacy_rows:
+        migration_status = "provenance-rich rows now outnumber legacy rows"
+    elif provenance_rich_rows < legacy_rows:
+        migration_status = "legacy rows still outnumber provenance-rich rows"
+    else:
+        migration_status = "provenance-rich rows and legacy rows are tied"
+
+    latest = receipts[-1] if receipts else None
+    payload = {
+        "log_path": str(log_path),
+        "total_receipts": total,
+        "provenance_coverage": {
+            "receipt_id": f"{with_ids}/{total}",
+            "source": f"{with_source}/{total}",
+            "session": f"{with_session}/{total}",
+            "host": f"{with_host}/{total}",
+            "parent": f"{with_parent}/{total}",
+        },
+        "actions": dict(sorted(action_counts.items())),
+        "migration_state": {
+            "provenance_rich_rows": provenance_rich_rows,
+            "legacy_rows": legacy_rows,
+            "status": migration_status,
+        },
+        "legacy_examples": legacy_examples[:5],
+        "latest_receipt": latest,
+    }
+
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if errors else 0
+
+    print(f"log_path: {log_path}")
+    print(f"total_receipts: {total}")
+
+    if not receipts:
+        return 1 if errors else 0
+
+    print("provenance_coverage:")
+    print(f"  receipt_id: {with_ids}/{total}")
+    print(f"  source:     {with_source}/{total}")
+    print(f"  session:    {with_session}/{total}")
+    print(f"  host:       {with_host}/{total}")
+    print(f"  parent:     {with_parent}/{total}")
+
+    print("actions:")
+    for action in sorted(action_counts):
+        print(f"  {action}: {action_counts[action]}")
+
+    print("migration_state:")
+    print(f"  provenance_rich_rows: {provenance_rich_rows}")
+    print(f"  legacy_rows:          {legacy_rows}")
+    print(f"  status:               {migration_status}")
+
+    if legacy_examples:
+        print("legacy_examples:")
+        for example in legacy_examples[:5]:
+            print(f"  {example}")
+
+    print("latest_receipt:")
+    print(f"  timestamp: {latest.get('timestamp')}")
+    print(f"  action:    {latest.get('action')}")
+    print(f"  artifact:  {latest.get('artifact')}")
+    print(f"  receipt_id:{' ' if latest.get('receipt_id') else ''}{latest.get('receipt_id', '-')}")
+
+    return 1 if errors else 0
+
+
+def report_gaps(log_path: Path, json_output: bool = False) -> int:
+    if not log_path.exists():
+        print(f"no receipts yet at {log_path}")
+        return 0
+
+    receipts, errors = parse_receipts(log_path)
+    for err in errors:
+        print(err, file=sys.stderr)
+
+    rows_with_gaps: list[dict[str, Any]] = []
+    core_gap_rows = 0
+    linkage_gap_rows = 0
+    for i, item in enumerate(receipts, start=1):
+        missing_core = [field for field in CORE_PROVENANCE_FIELDS if not item.get(field)]
+        missing_linkage = [field for field in LINKAGE_FIELDS if not item.get(field)]
+        if not missing_core and not missing_linkage:
+            continue
+
+        if missing_core:
+            core_gap_rows += 1
+        elif missing_linkage:
+            linkage_gap_rows += 1
+
+        row = {
+            "index": i,
+            "timestamp": item.get("timestamp"),
+            "action": item.get("action"),
+            "artifact": item.get("artifact"),
+            "missing_core": missing_core,
+            "missing_linkage": missing_linkage,
+            "summary": item.get("summary"),
+        }
+        rows_with_gaps.append(row)
+
+    payload = {
+        "log_path": str(log_path),
+        "total_receipts": len(receipts),
+        "core_gap_rows": {"present": core_gap_rows, "total": len(receipts)},
+        "linkage_gap_rows": {"present": linkage_gap_rows, "total": len(receipts)},
+        "status": {
+            "core_provenance": "complete" if core_gap_rows == 0 else "needs_repair",
+            "linkage": "complete" if linkage_gap_rows == 0 else "optional_gaps_remaining",
+        },
+        "core_gap_examples": [row for row in rows_with_gaps if row["missing_core"]][:5],
+        "linkage_gap_examples": [row for row in rows_with_gaps if (not row["missing_core"] and row["missing_linkage"])][:5],
+        "rows": rows_with_gaps,
+    }
+
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if errors else 0
+
+    for row in rows_with_gaps:
+        print(f"[{row['index']}] {row['timestamp']} | {row['action']} | {row['artifact']}")
+        if row["missing_core"]:
+            print(f"    missing_core:    {', '.join(row['missing_core'])}")
+        if row["missing_linkage"]:
+            print(f"    missing_linkage: {', '.join(row['missing_linkage'])}")
+        print(f"    summary:         {row['summary']}")
+
+    if core_gap_rows == 0 and linkage_gap_rows == 0:
+        print("all receipts carry every tracked provenance and linkage field")
+    else:
+        print(f"core_gap_rows:    {core_gap_rows}/{len(receipts)}")
+        print(f"linkage_gap_rows: {linkage_gap_rows}/{len(receipts)}")
+        print("status:")
+        print(f"  core_provenance: {'complete' if core_gap_rows == 0 else 'needs_repair'}")
+        print(f"  linkage:         {'complete' if linkage_gap_rows == 0 else 'optional_gaps_remaining'}")
+
+    return 1 if errors else 0
+
+
+def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    artifact_rows: dict[str, dict[str, Any]] = {}
+    for i, item in enumerate(receipts, start=1):
+        artifact = str(item.get("artifact") or "-")
+        row = artifact_rows.setdefault(
+            artifact,
+            {
+                "artifact": artifact,
+                "receipt_count": 0,
+                "actions": {},
+                "latest_timestamp": None,
+                "latest_action": None,
+                "latest_receipt_id": None,
+                "core_gap_rows": 0,
+                "linkage_gap_rows": 0,
+                "rows": [],
+            },
+        )
+        row["receipt_count"] += 1
+        action = str(item.get("action") or "-")
+        row["actions"][action] = row["actions"].get(action, 0) + 1
+        row["latest_timestamp"] = item.get("timestamp")
+        row["latest_action"] = item.get("action")
+        row["latest_receipt_id"] = item.get("receipt_id")
+
+        missing_core = [field for field in CORE_PROVENANCE_FIELDS if not item.get(field)]
+        missing_linkage = [field for field in LINKAGE_FIELDS if not item.get(field)]
+        if missing_core:
+            row["core_gap_rows"] += 1
+        elif missing_linkage:
+            row["linkage_gap_rows"] += 1
+
+        row["rows"].append(
+            {
+                "index": i,
+                "timestamp": item.get("timestamp"),
+                "action": item.get("action"),
+                "receipt_id": item.get("receipt_id"),
+                "summary": item.get("summary"),
+                "source": item.get("source"),
+                "session": item.get("session"),
+                "host": item.get("host"),
+                "parent_receipt": item.get("parent_receipt"),
+                "missing_core": missing_core,
+                "missing_linkage": missing_linkage,
+            }
+        )
+
+    return sorted(artifact_rows.values(), key=lambda row: (-row["receipt_count"], row["artifact"]))
+
+
+def report_artifacts(log_path: Path, json_output: bool = False) -> int:
+    if not log_path.exists():
+        print(f"no receipts yet at {log_path}")
+        return 0
+
+    receipts, errors = parse_receipts(log_path)
+    for err in errors:
+        print(err, file=sys.stderr)
+
+    artifacts = collect_artifact_rows(receipts)
+    payload = {
+        "log_path": str(log_path),
+        "total_receipts": len(receipts),
+        "artifact_count": len(artifacts),
+        "artifacts": artifacts,
+    }
+
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if errors else 0
+
+    print(f"log_path: {log_path}")
+    print(f"total_receipts: {len(receipts)}")
+    print(f"artifact_count: {len(artifacts)}")
+    for row in artifacts:
+        actions_text = ", ".join(f"{k}={row['actions'][k]}" for k in sorted(row["actions"]))
+        print(f"- {row['artifact']}")
+        print(f"  receipt_count: {row['receipt_count']}")
+        print(f"  actions: {actions_text}")
+        print(f"  latest: {row['latest_timestamp']} | {row['latest_action']} | {row['latest_receipt_id'] or '-'}")
+        print(f"  core_gap_rows: {row['core_gap_rows']}")
+        print(f"  linkage_gap_rows: {row['linkage_gap_rows']}")
+
+    return 1 if errors else 0
+
+
+def inspect_artifact(log_path: Path, artifact: str, json_output: bool = False) -> int:
+    if not log_path.exists():
+        print(f"no receipts yet at {log_path}")
+        return 0
+
+    receipts, errors = parse_receipts(log_path)
+    for err in errors:
+        print(err, file=sys.stderr)
+
+    artifacts = collect_artifact_rows(receipts)
+    match = next((row for row in artifacts if row["artifact"] == artifact), None)
+    if match is None:
+        print(f"artifact not found: {artifact}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "log_path": str(log_path),
+        "artifact": match,
+    }
+
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if errors else 0
+
+    actions_text = ", ".join(f"{k}={match['actions'][k]}" for k in sorted(match["actions"]))
+    print(f"log_path: {log_path}")
+    print(f"artifact: {match['artifact']}")
+    print(f"receipt_count: {match['receipt_count']}")
+    print(f"actions: {actions_text}")
+    print(f"latest: {match['latest_timestamp']} | {match['latest_action']} | {match['latest_receipt_id'] or '-'}")
+    print(f"core_gap_rows: {match['core_gap_rows']}")
+    print(f"linkage_gap_rows: {match['linkage_gap_rows']}")
+    print("rows:")
+    for row in match["rows"]:
+        print(f"  [{row['index']}] {row['timestamp']} | {row['action']} | {row['receipt_id'] or '-'}")
+        print(f"      summary: {row['summary']}")
+        if row['source']:
+            print(f"      source: {row['source']}")
+        if row['session']:
+            print(f"      session: {row['session']}")
+        if row['host']:
+            print(f"      host: {row['host']}")
+        if row['parent_receipt']:
+            print(f"      parent_receipt: {row['parent_receipt']}")
+        if row['missing_core']:
+            print(f"      missing_core: {', '.join(row['missing_core'])}")
+        if row['missing_linkage']:
+            print(f"      missing_linkage: {', '.join(row['missing_linkage'])}")
+
+    return 1 if errors else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Append-only collaboration receipt log")
     parser.add_argument("--log-path", default=str(DEFAULT_LOG_PATH), help="Path to JSONL receipt log")
@@ -173,6 +485,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("list", help="List receipts")
     subparsers.add_parser("validate", help="Validate receipt log structure and provenance coverage")
+    summary_parser = subparsers.add_parser("summary", help="Print compact log stats and latest receipt info")
+    summary_parser.add_argument("--json", action="store_true", help="Emit summary as JSON for machine consumption")
+    gaps_parser = subparsers.add_parser("gaps", help="List receipts that still lack tracked provenance fields")
+    gaps_parser.add_argument("--json", action="store_true", help="Emit gap details as JSON for machine consumption")
+    artifacts_parser = subparsers.add_parser("artifacts", help="Group receipts by artifact and show lineage/coverage at that level")
+    artifacts_parser.add_argument("--json", action="store_true", help="Emit artifact groups as JSON for machine consumption")
+    inspect_parser = subparsers.add_parser("inspect", help="Show the full receipt lineage for one artifact")
+    inspect_parser.add_argument("artifact", help="Exact artifact path/name to inspect")
+    inspect_parser.add_argument("--json", action="store_true", help="Emit artifact lineage as JSON for machine consumption")
     return parser
 
 
@@ -198,6 +519,14 @@ def main() -> int:
         return list_receipts(log_path)
     if args.command == "validate":
         return validate_receipts(log_path)
+    if args.command == "summary":
+        return summarize_receipts(log_path, json_output=args.json)
+    if args.command == "gaps":
+        return report_gaps(log_path, json_output=args.json)
+    if args.command == "artifacts":
+        return report_artifacts(log_path, json_output=args.json)
+    if args.command == "inspect":
+        return inspect_artifact(log_path, args.artifact, json_output=args.json)
 
     parser.error("unknown command")
     return 2

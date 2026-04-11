@@ -18,10 +18,14 @@ Slop Farm needs at least one concrete artifact that demonstrates the repo is mor
 
 ## What it does
 
-It supports three operations:
+It supports seven operations:
 - `add` — append one collaboration receipt to a JSONL file
 - `list` — print the receipts back out
 - `validate` — check that the log is structurally sound and report provenance coverage
+- `summary` — print compact stats, action counts, migration state, legacy examples, and the latest receipt (optionally as JSON)
+- `gaps` — print exactly which receipts still lack core provenance fields vs optional linkage fields (optionally as JSON)
+- `artifacts` — group receipts by artifact so lineage and remaining debt are visible without scanning the whole log
+- `inspect` — show the full receipt lineage for one artifact (optionally as JSON)
 
 Each receipt always captures:
 - receipt ID
@@ -64,6 +68,82 @@ python3 tools/receipt-log/receipt_log.py list
 python3 tools/receipt-log/receipt_log.py validate
 ```
 
+### Get a compact summary
+
+```bash
+python3 tools/receipt-log/receipt_log.py summary
+```
+
+### Get a machine-readable summary
+
+```bash
+python3 tools/receipt-log/receipt_log.py summary --json
+```
+
+This shows:
+- total receipts
+- provenance coverage
+- action counts
+- whether provenance-rich rows outnumber legacy rows yet
+- a short list of remaining legacy examples
+- the latest receipt
+
+### See the remaining provenance gaps
+
+```bash
+python3 tools/receipt-log/receipt_log.py gaps
+```
+
+### Get machine-readable gap details
+
+```bash
+python3 tools/receipt-log/receipt_log.py gaps --json
+```
+
+This is the fastest way to answer "which exact rows are still weak, and which fields are they missing?"
+
+The output separates:
+- `missing_core` — the trust-critical provenance fields (`receipt_id`, `source`, `session`, `host`)
+- `missing_linkage` — optional chain metadata like `parent_receipt`
+
+That prevents `parent_receipt` from making otherwise provenance-rich rows look as weak as the original seed rows.
+
+The `--json` form now also includes a top-level `status` block plus `core_gap_examples` and `linkage_gap_examples`, so another tool can tell at a glance whether the log still needs trust repair or only has optional linkage debt left.
+
+### See artifact-level lineage
+
+```bash
+python3 tools/receipt-log/receipt_log.py artifacts
+```
+
+### Get machine-readable artifact groups
+
+```bash
+python3 tools/receipt-log/receipt_log.py artifacts --json
+```
+
+This is the fastest way to answer questions like:
+- which artifacts have the most receipt history?
+- which artifacts still carry core provenance debt?
+- what was the latest recorded action for each artifact?
+
+### Inspect one artifact's lineage
+
+```bash
+python3 tools/receipt-log/receipt_log.py inspect tools/receipt-log
+```
+
+### Get machine-readable artifact lineage
+
+```bash
+python3 tools/receipt-log/receipt_log.py inspect tools/receipt-log --json
+```
+
+This is the fastest way to answer questions like:
+- what happened to one artifact over time?
+- which exact rows still carry provenance debt for that artifact?
+- what is the latest receipt and what older rows does it supersede?
+
 ### Use a custom log path
 
 ```bash
@@ -93,6 +173,18 @@ That means if an earlier row is missing `receipt_id`, `source`, `session`, or `h
 - leaves the original row intact as part of the history
 
 This keeps the migration visible in the artifact itself instead of silently rewriting history.
+
+The `summary` command makes that migration easier to inspect quickly by surfacing provenance coverage, action counts, migration state (legacy vs provenance-rich rows), a few remaining legacy examples, and the latest receipt without dumping the full log.
+
+Use `summary --json` when another tool or agent needs the same state without scraping terminal text.
+
+The `gaps` command is the sharper follow-up when you want the exact repair queue instead of aggregate stats, and it now distinguishes core provenance debt from optional linkage debt.
+
+Use `gaps --json` when another tool or agent should consume the repair queue directly instead of scraping terminal output.
+
+The `artifacts` command is the sharper follow-up when you want artifact-level lineage and trust state across the whole log instead of row-level repair detail.
+
+The `inspect` command is the sharper follow-up when you want the full receipt history for one artifact without manually filtering the full list output.
 
 ## Design notes
 
