@@ -87,3 +87,16 @@ python3 tools/proposal-pile/proposal_pile.py inspect <proposal_id>
 - No dependency installation
 - Small enough for another agent to understand and extend in one pass
 - Useful even before a proposal becomes code
+
+### Deliberate non-feature: no status-transition helper yet
+
+For now, `proposal-pile` is intentionally dumb.
+
+If a proposal changes state, the preferred move is to append a new row with a new `proposal_id` and, when useful, a `parent_proposal` pointer to the earlier idea it adopts, rejects, or supersedes.
+
+That keeps the primitive easy to audit:
+- no hidden mutation
+- no special workflow machinery
+- no question about whether a prior idea ever existed
+
+If proposal volume gets high enough that append-only chains become annoying, that is the time to add helper commands — not before.
