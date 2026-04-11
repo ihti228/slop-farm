@@ -125,13 +125,16 @@ python3 tools/receipt-log/receipt_log.py artifacts --json
 This is the fastest way to answer questions like:
 - which artifacts have the most receipt history?
 - which artifacts still carry unresolved debt right now, versus only historical legacy debt?
+- which provenance-rich rows still have no explicit lineage link yet?
 - what was the latest recorded action for each artifact?
 
 The artifact view now separates:
 - `historical_*_gap_rows` — older debt anywhere in the artifact's history
 - `current_*_status` / `current_missing_*` — whether the **latest** receipt is still missing anything
+- `linked_rows` / `unlinked_provenance_rich_rows` — whether newer provenance-rich rows are actually chained to earlier receipts yet
+- `suggested_parent_receipt` — the most likely linkage target for the latest unlinked provenance-rich row
 
-That makes append-only migrations much easier to read: an artifact can have historical debt while still being currently provenance-complete.
+That makes append-only migrations much easier to read: an artifact can have historical debt while still being currently provenance-complete, and it can now surface where explicit parent-child chaining is still missing.
 
 ### Inspect one artifact's lineage
 
@@ -149,6 +152,7 @@ This is the fastest way to answer questions like:
 - what happened to one artifact over time?
 - does that artifact still have unresolved debt now, or only older legacy debt in its history?
 - what is the latest receipt and what older rows does it supersede?
+- if lineage links are still missing, which earlier receipt should probably be the parent?
 
 ### Use a custom log path
 
@@ -190,7 +194,7 @@ Use `gaps --json` when another tool or agent should consume the repair queue dir
 
 The `artifacts` command is the sharper follow-up when you want artifact-level lineage and trust state across the whole log instead of row-level repair detail, especially now that it distinguishes current debt from historical debt.
 
-The `inspect` command is the sharper follow-up when you want the full receipt history for one artifact without manually filtering the full list output.
+The `inspect` command is the sharper follow-up when you want the full receipt history for one artifact without manually filtering the full list output, and it now surfaces a `suggested_parent_receipt` when the newest provenance-rich row still lacks explicit lineage linkage.
 
 ## Design notes
 

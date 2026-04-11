@@ -344,10 +344,14 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
                 "latest_receipt_id": None,
                 "core_gap_rows": 0,
                 "linkage_gap_rows": 0,
+                "linked_rows": 0,
+                "unlinked_provenance_rich_rows": 0,
                 "latest_missing_core": [],
                 "latest_missing_linkage": [],
                 "current_core_status": "unknown",
                 "current_linkage_status": "unknown",
+                "current_parent_receipt": None,
+                "suggested_parent_receipt": None,
                 "rows": [],
             },
         )
@@ -365,10 +369,26 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
         elif missing_linkage:
             row["linkage_gap_rows"] += 1
 
+        parent_receipt = item.get("parent_receipt")
+        if parent_receipt:
+            row["linked_rows"] += 1
+        elif not missing_core:
+            row["unlinked_provenance_rich_rows"] += 1
+
         row["latest_missing_core"] = missing_core
         row["latest_missing_linkage"] = missing_linkage
         row["current_core_status"] = "needs_repair" if missing_core else "complete"
         row["current_linkage_status"] = "optional_gaps_remaining" if (not missing_core and missing_linkage) else "complete"
+        row["current_parent_receipt"] = parent_receipt
+
+        suggested_parent = None
+        if not missing_core and not parent_receipt:
+            for earlier in reversed(row["rows"]):
+                earlier_receipt_id = earlier.get("receipt_id")
+                if earlier_receipt_id:
+                    suggested_parent = earlier_receipt_id
+                    break
+        row["suggested_parent_receipt"] = suggested_parent
 
         row["rows"].append(
             {
@@ -380,9 +400,10 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
                 "source": item.get("source"),
                 "session": item.get("session"),
                 "host": item.get("host"),
-                "parent_receipt": item.get("parent_receipt"),
+                "parent_receipt": parent_receipt,
                 "missing_core": missing_core,
                 "missing_linkage": missing_linkage,
+                "suggested_parent_receipt": suggested_parent,
             }
         )
 
@@ -425,8 +446,14 @@ def report_artifacts(log_path: Path, json_output: bool = False) -> int:
         if row['latest_missing_core']:
             print(f"  current_missing_core: {', '.join(row['latest_missing_core'])}")
         print(f"  current_linkage_status: {row['current_linkage_status']}")
+        print(f"  linked_rows: {row['linked_rows']}")
+        print(f"  unlinked_provenance_rich_rows: {row['unlinked_provenance_rich_rows']}")
+        if row['current_parent_receipt']:
+            print(f"  current_parent_receipt: {row['current_parent_receipt']}")
         if row['latest_missing_linkage']:
             print(f"  current_missing_linkage: {', '.join(row['latest_missing_linkage'])}")
+        if row['suggested_parent_receipt']:
+            print(f"  suggested_parent_receipt: {row['suggested_parent_receipt']}")
 
     return 1 if errors else 0
 
@@ -467,8 +494,14 @@ def inspect_artifact(log_path: Path, artifact: str, json_output: bool = False) -
     if match['latest_missing_core']:
         print(f"current_missing_core: {', '.join(match['latest_missing_core'])}")
     print(f"current_linkage_status: {match['current_linkage_status']}")
+    print(f"linked_rows: {match['linked_rows']}")
+    print(f"unlinked_provenance_rich_rows: {match['unlinked_provenance_rich_rows']}")
+    if match['current_parent_receipt']:
+        print(f"current_parent_receipt: {match['current_parent_receipt']}")
     if match['latest_missing_linkage']:
         print(f"current_missing_linkage: {', '.join(match['latest_missing_linkage'])}")
+    if match['suggested_parent_receipt']:
+        print(f"suggested_parent_receipt: {match['suggested_parent_receipt']}")
     print("rows:")
     for row in match["rows"]:
         print(f"  [{row['index']}] {row['timestamp']} | {row['action']} | {row['receipt_id'] or '-'}")
@@ -485,6 +518,8 @@ def inspect_artifact(log_path: Path, artifact: str, json_output: bool = False) -
             print(f"      missing_core: {', '.join(row['missing_core'])}")
         if row['missing_linkage']:
             print(f"      missing_linkage: {', '.join(row['missing_linkage'])}")
+        if row['suggested_parent_receipt']:
+            print(f"      suggested_parent_receipt: {row['suggested_parent_receipt']}")
 
     return 1 if errors else 0
 
