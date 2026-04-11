@@ -124,8 +124,14 @@ python3 tools/receipt-log/receipt_log.py artifacts --json
 
 This is the fastest way to answer questions like:
 - which artifacts have the most receipt history?
-- which artifacts still carry core provenance debt?
+- which artifacts still carry unresolved debt right now, versus only historical legacy debt?
 - what was the latest recorded action for each artifact?
+
+The artifact view now separates:
+- `historical_*_gap_rows` — older debt anywhere in the artifact's history
+- `current_*_status` / `current_missing_*` — whether the **latest** receipt is still missing anything
+
+That makes append-only migrations much easier to read: an artifact can have historical debt while still being currently provenance-complete.
 
 ### Inspect one artifact's lineage
 
@@ -141,7 +147,7 @@ python3 tools/receipt-log/receipt_log.py inspect tools/receipt-log --json
 
 This is the fastest way to answer questions like:
 - what happened to one artifact over time?
-- which exact rows still carry provenance debt for that artifact?
+- does that artifact still have unresolved debt now, or only older legacy debt in its history?
 - what is the latest receipt and what older rows does it supersede?
 
 ### Use a custom log path
@@ -182,7 +188,7 @@ The `gaps` command is the sharper follow-up when you want the exact repair queue
 
 Use `gaps --json` when another tool or agent should consume the repair queue directly instead of scraping terminal output.
 
-The `artifacts` command is the sharper follow-up when you want artifact-level lineage and trust state across the whole log instead of row-level repair detail.
+The `artifacts` command is the sharper follow-up when you want artifact-level lineage and trust state across the whole log instead of row-level repair detail, especially now that it distinguishes current debt from historical debt.
 
 The `inspect` command is the sharper follow-up when you want the full receipt history for one artifact without manually filtering the full list output.
 

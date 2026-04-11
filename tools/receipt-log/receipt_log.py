@@ -344,6 +344,10 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
                 "latest_receipt_id": None,
                 "core_gap_rows": 0,
                 "linkage_gap_rows": 0,
+                "latest_missing_core": [],
+                "latest_missing_linkage": [],
+                "current_core_status": "unknown",
+                "current_linkage_status": "unknown",
                 "rows": [],
             },
         )
@@ -360,6 +364,11 @@ def collect_artifact_rows(receipts: list[dict[str, Any]]) -> list[dict[str, Any]
             row["core_gap_rows"] += 1
         elif missing_linkage:
             row["linkage_gap_rows"] += 1
+
+        row["latest_missing_core"] = missing_core
+        row["latest_missing_linkage"] = missing_linkage
+        row["current_core_status"] = "needs_repair" if missing_core else "complete"
+        row["current_linkage_status"] = "optional_gaps_remaining" if (not missing_core and missing_linkage) else "complete"
 
         row["rows"].append(
             {
@@ -410,8 +419,14 @@ def report_artifacts(log_path: Path, json_output: bool = False) -> int:
         print(f"  receipt_count: {row['receipt_count']}")
         print(f"  actions: {actions_text}")
         print(f"  latest: {row['latest_timestamp']} | {row['latest_action']} | {row['latest_receipt_id'] or '-'}")
-        print(f"  core_gap_rows: {row['core_gap_rows']}")
-        print(f"  linkage_gap_rows: {row['linkage_gap_rows']}")
+        print(f"  historical_core_gap_rows: {row['core_gap_rows']}")
+        print(f"  historical_linkage_gap_rows: {row['linkage_gap_rows']}")
+        print(f"  current_core_status: {row['current_core_status']}")
+        if row['latest_missing_core']:
+            print(f"  current_missing_core: {', '.join(row['latest_missing_core'])}")
+        print(f"  current_linkage_status: {row['current_linkage_status']}")
+        if row['latest_missing_linkage']:
+            print(f"  current_missing_linkage: {', '.join(row['latest_missing_linkage'])}")
 
     return 1 if errors else 0
 
@@ -446,8 +461,14 @@ def inspect_artifact(log_path: Path, artifact: str, json_output: bool = False) -
     print(f"receipt_count: {match['receipt_count']}")
     print(f"actions: {actions_text}")
     print(f"latest: {match['latest_timestamp']} | {match['latest_action']} | {match['latest_receipt_id'] or '-'}")
-    print(f"core_gap_rows: {match['core_gap_rows']}")
-    print(f"linkage_gap_rows: {match['linkage_gap_rows']}")
+    print(f"historical_core_gap_rows: {match['core_gap_rows']}")
+    print(f"historical_linkage_gap_rows: {match['linkage_gap_rows']}")
+    print(f"current_core_status: {match['current_core_status']}")
+    if match['latest_missing_core']:
+        print(f"current_missing_core: {', '.join(match['latest_missing_core'])}")
+    print(f"current_linkage_status: {match['current_linkage_status']}")
+    if match['latest_missing_linkage']:
+        print(f"current_missing_linkage: {', '.join(match['latest_missing_linkage'])}")
     print("rows:")
     for row in match["rows"]:
         print(f"  [{row['index']}] {row['timestamp']} | {row['action']} | {row['receipt_id'] or '-'}")
