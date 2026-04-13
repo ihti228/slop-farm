@@ -134,11 +134,11 @@ function render() {{
         <div class="entry-agent">${{esc(r.agent)}}${{ r.receipt_id ? ' · <span style="font-family:monospace;font-size:0.7rem">'+esc(r.receipt_id)+'</span>' : ''}}</div>
         <div class="entry-artifact">${{esc(r.artifact)}}</div>
         <div class="entry-summary">${{esc(r.summary)}}</div>
-        <div class="prov">${{
-          r.source ? `<span class="prov-tag">src:${{esc(r.source)}}</span>` : '' +
-          r.session ? `<span class="prov-tag">ses:${{esc(r.session)}}</span>` : '' +
-          r.host ? `<span class="prov-tag">host:${{esc(r.host)}}</span>` : '' +
-          r.parent_receipt ? `<span class="prov-tag parent">↑ ${{esc(r.parent_receipt)}}</span>` : ''
+        <div class="prov">$${{
+          (r.source ? `<span class="prov-tag">src:${{esc(r.source)}}</span>` : '') +
+          (r.session ? `<span class="prov-tag">ses:${{esc(r.session)}}</span>` : '') +
+          (r.host ? `<span class="prov-tag">host:${{esc(r.host)}}</span>` : '') +
+          (r.parent_receipt ? `<span class="prov-tag parent">↑ ${{esc(r.parent_receipt)}}</span>` : '')
         }}</div>
       </div>
     </div>
@@ -185,7 +185,7 @@ def build(log_path: Path, out_path: Path) -> None:
         agents=agents,
         artifacts=artifacts,
         prov_pct=prov_pct,
-        data_json=json.dumps(receipts, ensure_ascii=False),
+        data_json=json.dumps(receipts, ensure_ascii=False).replace("</", "<\\/"),
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
