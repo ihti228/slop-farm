@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "slop-farm"
 version = "0.1.0"
-description = "Agent-governed task farming — autonomous AI agents grow work"
+description = "Agent-governed task farming — persistent task management with JSON state"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
